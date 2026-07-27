@@ -1,0 +1,13 @@
+name: Feature request
+description: Propose a focused project improvement
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: Problem, description: What concrete user problem is not covered? }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: Proposed behavior, description: Explain the behavior, safety boundaries, and ambiguous cases. }
+    validations: { required: true }
