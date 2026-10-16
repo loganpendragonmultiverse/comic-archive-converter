@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import stat
 import tempfile
 import zipfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import py7zr
@@ -150,4 +151,126 @@ def convert(source: Path, output: Path, output_format: str) -> dict[str, Any]:
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
         "output_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
         "members": before,
+    }
+
+
+def preflight(source: Path, output: Path, output_format: str) -> dict[str, Any]:
+    """Inspect archive headers without reading member data or creating files."""
+    source, output = source.resolve(), output.resolve()
+    if output_format not in {"cbz", "cb7"}:
+        raise ValueError("format must be cbz or cb7")
+    if not source.is_file():
+        raise ValueError("source must be an existing archive")
+    conflicts = []
+    if not output.parent.is_dir():
+        conflicts.append("output parent must be an existing directory")
+    if source == output:
+        conflicts.append("output must differ from source")
+    if output.exists():
+        conflicts.append("output already exists")
+    if output.suffix.casefold() != f".{output_format}":
+        conflicts.append(f"output must use .{output_format}")
+    temporary = output.with_name(f".{output.stem}.tmp{output.suffix}")
+    if temporary.exists():
+        conflicts.append("temporary output already exists")
+    members: list[dict[str, Any]] = []
+    issues: list[str] = []
+    seen: set[str] = set()
+
+    def member(
+        name: str, size: Any, directory: bool, link: bool, encrypted: bool, regular: bool = True
+    ) -> None:
+        problems = []
+        normalized = PurePosixPath(name.replace("\\", "/"))
+        if (
+            normalized.is_absolute()
+            or ".." in normalized.parts
+            or not normalized.parts
+            or PureWindowsPath(name).drive
+            or "\x00" in name
+        ):
+            problems.append("unsafe path")
+        key = normalized.as_posix().rstrip("/").casefold()
+        if key in seen:
+            problems.append("duplicate path")
+        seen.add(key)
+        if link or not regular:
+            problems.append("symbolic link or non-regular member")
+        if encrypted:
+            problems.append("encrypted member")
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            size = None
+            if not directory:
+                problems.append("declared size unavailable")
+        members.append(
+            {
+                "path": name,
+                "directory": directory,
+                "declared_expanded_bytes": size,
+                "issues": problems,
+            }
+        )
+
+    suffix = source.suffix.casefold()
+    if suffix in ZIP_INPUTS:
+        with zipfile.ZipFile(source) as archive:
+            for info in archive.infolist():
+                mode = info.external_attr >> 16
+                kind = stat.S_IFMT(mode)
+                member(
+                    info.filename,
+                    info.file_size,
+                    info.is_dir(),
+                    stat.S_ISLNK(mode),
+                    bool(info.flag_bits & 1),
+                    kind in {0, stat.S_IFREG, stat.S_IFDIR},
+                )
+    elif suffix in SEVEN_INPUTS:
+        with py7zr.SevenZipFile(source, "r") as archive:
+            encrypted = archive.needs_password()
+            for info in archive.list():
+                member(
+                    info.filename,
+                    info.uncompressed,
+                    info.is_directory,
+                    info.is_symlink,
+                    encrypted,
+                    info.is_file or info.is_directory,
+                )
+    else:
+        raise ValueError("source must be ZIP, CBZ, 7Z, or CB7")
+    file_paths = {
+        PurePosixPath(item["path"].replace("\\", "/")).as_posix().rstrip("/").casefold()
+        for item in members
+        if not item["directory"]
+    }
+    for item in members:
+        normalized = PurePosixPath(item["path"].replace("\\", "/").casefold())
+        if any(parent.as_posix() in file_paths for parent in normalized.parents):
+            item["issues"].append("file/directory ancestor conflict")
+    if len(members) > MAX_ENTRIES:
+        issues.append("archive exceeds the entry limit")
+    if not any(not item["directory"] for item in members):
+        issues.append("archive contains no files")
+    known_total = sum(item["declared_expanded_bytes"] or 0 for item in members)
+    complete = all(
+        item["declared_expanded_bytes"] is not None for item in members if not item["directory"]
+    )
+    if known_total > MAX_UNCOMPRESSED:
+        issues.append("archive exceeds the declared uncompressed-size limit")
+    return {
+        "schema_version": 1,
+        "preflight": True,
+        "source": str(source),
+        "output": str(output),
+        "format": output_format,
+        "members": members,
+        "member_count": len(members),
+        "declared_expanded_bytes": known_total if complete else None,
+        "known_declared_expanded_bytes": known_total,
+        "declared_sizes_complete": complete,
+        "size_note": "Declared estimates from archive headers; member data and actual expanded sizes are not verified.",
+        "output_conflicts": conflicts,
+        "issues": issues,
+        "ready": not conflicts and not issues and not any(item["issues"] for item in members),
     }
