@@ -8,7 +8,7 @@ from pathlib import Path
 
 import py7zr
 
-from .core import convert
+from .core import convert, preflight
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -16,11 +16,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("source", type=Path)
     parser.add_argument("--format", choices=("cbz", "cb7"), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Report declared member estimates and conflicts without conversion or writes",
+    )
     args = parser.parse_args(argv)
     try:
-        report = convert(args.source, args.output, args.format)
+        report = (preflight if args.preflight else convert)(args.source, args.output, args.format)
         sys.stdout.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
-    except (OSError, TypeError, ValueError, zipfile.BadZipFile, py7zr.Bad7zFile) as exc:
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+        zipfile.BadZipFile,
+        py7zr.Bad7zFile,
+        py7zr.exceptions.PasswordRequired,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    return 0
+    return 1 if args.preflight and not report["ready"] else 0
