@@ -162,6 +162,8 @@ def preflight(source: Path, output: Path, output_format: str) -> dict[str, Any]:
     if not source.is_file():
         raise ValueError("source must be an existing archive")
     conflicts = []
+    if not output.parent.is_dir():
+        conflicts.append("output parent must be an existing directory")
     if source == output:
         conflicts.append("output must differ from source")
     if output.exists():
@@ -237,6 +239,15 @@ def preflight(source: Path, output: Path, output_format: str) -> dict[str, Any]:
                 )
     else:
         raise ValueError("source must be ZIP, CBZ, 7Z, or CB7")
+    file_paths = {
+        PurePosixPath(item["path"].replace("\\", "/")).as_posix().rstrip("/").casefold()
+        for item in members
+        if not item["directory"]
+    }
+    for item in members:
+        normalized = PurePosixPath(item["path"].replace("\\", "/").casefold())
+        if any(parent.as_posix() in file_paths for parent in normalized.parents):
+            item["issues"].append("file/directory ancestor conflict")
     if len(members) > MAX_ENTRIES:
         issues.append("archive exceeds the entry limit")
     if not any(not item["directory"] for item in members):

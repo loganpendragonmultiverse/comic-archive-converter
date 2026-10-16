@@ -11,7 +11,7 @@ from comic_archive_converter.cli import main
 
 
 def test_zip_estimates_conflicts_and_zero_writes(tmp_path, monkeypatch, capsys):
-    source, output = tmp_path / "one.cbz", tmp_path / "new" / "out.cb7"
+    source, output = tmp_path / "one.cbz", tmp_path / "out.cb7"
     with ZipFile(source, "w") as archive:
         archive.writestr("pages/", b"")
         archive.writestr("pages/one.jpg", b"abc")
@@ -28,7 +28,7 @@ def test_zip_estimates_conflicts_and_zero_writes(tmp_path, monkeypatch, capsys):
     assert report["ready"] and report["declared_expanded_bytes"] == 3
     assert report["member_count"] == 2
     assert "Declared estimates" in report["size_note"]
-    assert not output.parent.exists() and source.read_bytes() == before
+    assert not output.exists() and source.read_bytes() == before
     assert main([str(source), "--format", "cb7", "--output", str(output), "--preflight"]) == 0
     assert json.loads(capsys.readouterr().out)["preflight"]
     report = core.preflight(source, source, "cb7")
@@ -141,3 +141,98 @@ def test_seven_encryption_never_creates_output(tmp_path, capsys):
         archive.write(page, "page.jpg")
     assert main([str(hidden), "--format", "cbz", "--output", str(output), "--preflight"]) == 2
     assert capsys.readouterr().err and not output.exists()
+
+
+@pytest.mark.parametrize("kind", ["missing", "file", "file_ancestor"])
+def test_output_parent_conflicts_are_reported_without_writes(tmp_path, monkeypatch, capsys, kind):
+    source = tmp_path / "one.cbz"
+    with ZipFile(source, "w") as archive:
+        archive.writestr("001.jpg", b"page")
+    parent = tmp_path / "parent"
+    if kind != "missing":
+        parent.write_bytes(b"occupied parent")
+    output = (parent / "nested" if kind == "file_ancestor" else parent) / "out.cbz"
+    before = {
+        str(p.relative_to(tmp_path)): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+    }
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("preflight cannot create directories, decode members or write output")
+
+    monkeypatch.setattr(core.tempfile, "TemporaryDirectory", forbidden)
+    monkeypatch.setattr(core, "_write", forbidden)
+    monkeypatch.setattr(ZipFile, "open", forbidden)
+    monkeypatch.setattr(core.Path, "mkdir", forbidden)
+    report = core.preflight(source, output, "cbz")
+    assert not report["ready"]
+    assert "output parent must be an existing directory" in report["output_conflicts"]
+    assert main([str(source), "--format", "cbz", "--output", str(output), "--preflight"]) == 1
+    assert not json.loads(capsys.readouterr().out)["ready"]
+    assert {
+        str(p.relative_to(tmp_path)): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+    } == before
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("pages", "pages/001.jpg"),
+        ("pages/001.jpg", "pages"),
+        ("PAGES", "pages/001.jpg"),
+        ("PAGES/001.jpg", "pages"),
+    ],
+)
+@pytest.mark.parametrize("family", ["zip", "7z"])
+def test_file_directory_ancestor_conflicts_are_order_independent(
+    tmp_path, monkeypatch, names, family
+):
+    source = tmp_path / ("one.cbz" if family == "zip" else "one.cb7")
+    if family == "zip":
+        with ZipFile(source, "w") as archive:
+            for name in names:
+                archive.writestr(name, b"page")
+    else:
+        source.write_bytes(b"synthetic header fixture")
+
+        class Headers:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def needs_password(self):
+                return False
+
+            def list(self):
+                return [
+                    SimpleNamespace(
+                        filename=name,
+                        uncompressed=4,
+                        is_directory=False,
+                        is_symlink=False,
+                        is_file=True,
+                    )
+                    for name in names
+                ]
+
+        monkeypatch.setattr(core.py7zr, "SevenZipFile", Headers)
+    before = source.read_bytes()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("preflight must inspect headers only")
+
+    monkeypatch.setattr(core.tempfile, "TemporaryDirectory", forbidden)
+    monkeypatch.setattr(core, "_write", forbidden)
+    monkeypatch.setattr(ZipFile, "open", forbidden)
+    monkeypatch.setattr(core.Path, "mkdir", forbidden)
+    report = core.preflight(source, tmp_path / "out.cbz", "cbz")
+    assert not report["ready"]
+    assert any(
+        "file/directory ancestor conflict" in member["issues"] for member in report["members"]
+    )
+    assert source.read_bytes() == before
+    assert list(tmp_path.iterdir()) == [source]

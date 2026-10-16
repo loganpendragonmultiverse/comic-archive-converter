@@ -25,3 +25,7 @@ Part of the [Logan Pendragon Forge open-source collection](https://www.loganpend
 ```bash
 comic-archive-convert issue.cb7 --format cbz --output issue.cbz --preflight
 ```
+
+Preflight requires the output parent to exist as a directory. It also rejects
+file/directory ancestor conflicts (including case-normalized member names) in either
+archive order. These checks do not create directories or extract members.
