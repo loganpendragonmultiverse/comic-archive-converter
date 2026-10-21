@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comic-archive-converter"
-version = "1.2.0"
+version = "1.2.1"
 description = "Convert CBZ/ZIP and CB7/7Z comic archives through validated, byte-preserving member staging."
 readme = "README.md"
 requires-python = ">=3.10"

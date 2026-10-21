@@ -14,7 +14,7 @@ Preflight requires the output parent to exist as a directory. It also rejects
 file/directory ancestor conflicts (including case-normalized member names) in either
 archive order. These checks do not create directories or extract members.
 
-## 1.2.0 completion validation
+## 1.2.1 completion validation
 
 Keep all existing tests and the 90% branch-aware coverage requirement. Run the full commands above, then exercise the installed wheel and source distribution from outside this checkout. Use the installed example generator, convert ZIP to 7Z and back, compare every file's bytes and the empty directory, and independently run a real 7-Zip integrity check. No RAR conversion is promised.
 
@@ -27,3 +27,12 @@ for actual size, CRC and codec completion, including directory streams. This avo
 `ZipExtFile`'s declared-size truncation. Stored, Deflate, BZIP2 and ZIP LZMA remain
 supported; stdlib Zstandard is supported when available in the selected Python.
 ZIP LZMA dictionaries above 64 MiB are refused; optional EOS follows the ZIP flag.
+
+## Release artifact closure
+
+The tag workflow pins maintained action commits, checks the stable tag against
+the package version before building, runs the full quality and dependency-audit
+checks, validates wheel/sdist metadata and writes SHA256SUMS over those exact
+two payloads. Normal PR/main native matrix and independent installed-artifact
+review remain required before a public release. It does not publish a GitHub
+release automatically.
