@@ -332,7 +332,7 @@ def preflight(source: Path, output: Path, output_format: str) -> dict[str, Any]:
                 mode = info.external_attr >> 16
                 kind = stat.S_IFMT(mode)
                 member(
-                    info.filename,
+                    info.orig_filename,
                     info.file_size,
                     info.is_dir(),
                     stat.S_ISLNK(mode),

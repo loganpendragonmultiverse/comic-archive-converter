@@ -15,7 +15,11 @@ from comic_archive_converter.cli import main
 def make_zip(path, names=("pages/one.txt",)):
     with zipfile.ZipFile(path, "w") as archive:
         for name in names:
-            archive.writestr(name, b"" if name.endswith("/") else b"synthetic page")
+            info = zipfile.ZipInfo("fixture")
+            info.filename = name
+            archive.writestr(info, b"" if name.endswith("/") else b"synthetic page")
+    with zipfile.ZipFile(path) as archive:
+        assert [info.orig_filename for info in archive.infolist()] == list(names)
 
 
 @pytest.mark.parametrize(
@@ -29,6 +33,7 @@ def make_zip(path, names=("pages/one.txt",)):
         "trailing.",
         "new\nline",
         "back\\slash",
+        "page\x00hidden.png",
         *[
             name
             for prefix in ("COM", "LPT")
