@@ -30,7 +30,7 @@ Preflight requires the output parent to exist as a directory. It also rejects
 file/directory ancestor conflicts (including case-normalized member names) in either
 archive order. These checks do not create directories or extract members.
 
-## 1.2.0: Consistent conversion and verified publication
+## 1.2.1: Consistent conversion and verified publication
 
 Conversion applies the same header checks as preflight before creating its private workspace. Links, encryption, unavailable sizes, file/directory conflicts and non-portable member paths are refused. Portable paths use forward slashes, have no redundant components, Windows device names, control characters or alternate-stream names, and cannot collide after Unicode normalization and case folding. This conservative policy keeps extraction behavior consistent across the supported operating systems.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — 2026-10-21
+
+- Gate release artifacts on the package/tag identity, complete quality tests and dependency audit.
+- Pin maintained release actions and generate SHA256SUMS from the exact two built payloads.
+- Include the complete 1.2.0 runtime improvements; retain its source-only tag without publishing a GitHub release.
+
 ## 1.2.0 - 2026-10-21
 
 - Apply header preflight consistently before conversion and reject non-portable paths, links and unsafe metadata.
