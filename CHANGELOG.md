@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2 — 2026-10-21
+
+- Correct the placement of the full compressed ZIP stream validation note under the 1.2.0 release; preserve the original 1.0.0 release history.
+- Reissue the documented release with unchanged conversion behavior and dependency requirements.
+
 ## 1.2.1 — 2026-10-21
 
 - Gate release artifacts on the package/tag identity, complete quality tests and dependency audit.
@@ -14,6 +19,9 @@
 - Stream fingerprints, detect source changes and publish completed outputs exclusively without overwriting raced destinations.
 - Make malformed codec/header errors actionable and ship installed authority documents plus an owned PNG example generator.
 
+The 1.2.0 release also validates full compressed ZIP streams, detecting forged
+size/CRC prefixes, unfinished streams and trailing codec data before publication.
+
 ## 1.1.0 - 2026-10-16
 
 - Added non-converting header preflight with declared size estimates, member findings and output conflicts.
@@ -27,5 +35,3 @@
 - Added safe-path, symbolic-link, entry-count, and size controls.
 - Added post-conversion integrity checks and SHA-256 member-manifest receipts.
 
-The 1.2.0 release also validates full compressed ZIP streams, detecting forged
-size/CRC prefixes, unfinished streams and trailing codec data before publication.
